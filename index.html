@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bridge Card Distribution Calculator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #f0f4f0;
+    color: #1a1a1a;
+    line-height: 1.5;
+    padding: 1.5rem;
+  }
+  h1 {
+    text-align: center;
+    color: #1a5c2e;
+    margin-bottom: 1.5rem;
+    font-size: 1.6rem;
+  }
+  .input-panel {
+    max-width: 560px;
+    margin: 0 auto 1.5rem;
+    background: #fff;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  .field { margin-bottom: 1rem; }
+  .field label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+    font-size: 0.9rem;
+  }
+  .field input {
+    width: 100%;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-family: monospace;
+  }
+  .field input:focus { outline: none; border-color: #1a5c2e; box-shadow: 0 0 0 2px rgba(26,92,46,0.2); }
+  .row { display: flex; gap: 1rem; }
+  .row .field { flex: 1; }
+  .row .field input { font-family: inherit; }
+  .hint { font-size: 0.8rem; color: #666; margin-top: 0.2rem; }
+  button {
+    display: block;
+    width: 100%;
+    padding: 0.6rem;
+    background: #1a5c2e;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 0.25rem;
+  }
+  button:hover { background: #14742a; }
+  .error {
+    background: #fdecea;
+    color: #b71c1c;
+    padding: 0.6rem 0.8rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    display: none;
+  }
+  .results {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  th {
+    background: #1a5c2e;
+    color: #fff;
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  th:nth-child(3), th:nth-child(4) { text-align: right; }
+  td {
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid #e8e8e8;
+    font-size: 0.9rem;
+  }
+  td:nth-child(3), td:nth-child(4) { text-align: right; font-family: monospace; }
+  tr:last-child td { border-bottom: none; }
+  tr.subtotal {
+    background: #e8f5e9;
+    font-weight: 700;
+  }
+  tr.subtotal td { border-bottom: 2px solid #1a5c2e; }
+  .split-header td {
+    background: #f5f5f5;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #555;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #ccc;
+  }
+  .total-row { background: #1a5c2e; color: #fff; font-weight: 700; }
+  .total-row td { border-bottom: none; color: #fff; }
+  .card-named { color: #b71c1c; font-weight: 600; }
+  .card-x { color: #555; }
+</style>
+</head>
+<body>
+<h1>Bridge Card Distribution Calculator</h1>
+
+<div class="input-panel">
+  <div class="error" id="error"></div>
+  <div class="field">
+    <label for="cards">Missing Cards</label>
+    <input type="text" id="cards" value="KQxxxx" placeholder="e.g. KQxxxx" autocomplete="off">
+    <div class="hint">A K Q J T 9 8 7 6 5 4 3 2 = specific cards, x = small card</div>
+  </div>
+  <div class="row">
+    <div class="field">
+      <label for="west-vp">West Vacant Places</label>
+      <input type="number" id="west-vp" value="13" min="0" max="13">
+    </div>
+    <div class="field">
+      <label for="east-vp">East Vacant Places</label>
+      <input type="number" id="east-vp" value="13" min="0" max="13">
+    </div>
+  </div>
+  <button id="calc-btn">Calculate</button>
+</div>
+
+<div class="results" id="results"></div>
+
+<script>
+(function() {
+  const VALID_NAMED = new Set('AKQJT98765432'.split(''));
+
+  function comb(n, k) {
+    if (k < 0 || k > n) return 0;
+    if (k === 0 || k === n) return 1;
+    if (k > n - k) k = n - k;
+    let result = 1;
+    for (let i = 0; i < k; i++) {
+      result = result * (n - i) / (i + 1);
+    }
+    return Math.round(result);
+  }
+
+  function parseInput(text) {
+    const upper = text.toUpperCase().replace(/\s/g, '');
+    const named = [];
+    let xCount = 0;
+    for (const ch of upper) {
+      if (ch === 'X') {
+        xCount++;
+      } else if (VALID_NAMED.has(ch)) {
+        if (named.includes(ch)) throw new Error(`Duplicate card: ${ch}`);
+        named.push(ch);
+      } else {
+        throw new Error(`Invalid character: "${ch}"`);
+      }
+    }
+    if (named.length + xCount === 0) throw new Error('Enter at least one card.');
+    if (named.length + xCount > 13) throw new Error('Total missing cards cannot exceed 13.');
+    return { named, xCount };
+  }
+
+  function generate(named, xCount, w, e) {
+    const n = named.length + xCount;
+    const h = named.length;
+    const totalVP = w + e;
+
+    if (n > totalVP) throw new Error('Total missing cards exceed available vacant places.');
+
+    const patterns = [];
+    const subsetCount = 1 << h;
+
+    for (let mask = 0; mask < subsetCount; mask++) {
+      const westNamed = [];
+      const eastNamed = [];
+      for (let i = 0; i < h; i++) {
+        if (mask & (1 << i)) westNamed.push(named[i]);
+        else eastNamed.push(named[i]);
+      }
+      for (let sw = 0; sw <= xCount; sw++) {
+        const se = xCount - sw;
+        const k = westNamed.length + sw;
+        const eCount = eastNamed.length + se;
+        if (k > w || eCount > e) continue;
+
+        const combinations = comb(xCount, sw);
+        const denom = comb(totalVP, w);
+        const numer = combinations * comb(totalVP - n, w - k);
+        const prob = denom > 0 ? numer / denom : 0;
+
+        patterns.push({
+          westNamed, eastNamed, sw, se,
+          westTotal: k, eastTotal: eCount,
+          combinations, probability: prob
+        });
+      }
+    }
+    return patterns;
+  }
+
+  function formatCards(namedArr, xc) {
+    let s = '';
+    if (namedArr.length) s += `<span class="card-named">${namedArr.join('')}</span>`;
+    if (xc > 0) s += `<span class="card-x">${'x'.repeat(xc)}</span>`;
+    return s || '&mdash;';
+  }
+
+  function render(patterns) {
+    // Group by honour distribution (which named cards go W/E)
+    const groups = {};
+    for (const p of patterns) {
+      const key = p.westNamed.join('') + '|' + p.eastNamed.join('');
+      if (!groups[key]) groups[key] = { westNamed: p.westNamed, eastNamed: p.eastNamed, patterns: [], totalProb: 0 };
+      groups[key].patterns.push(p);
+      groups[key].totalProb += p.probability;
+    }
+
+    // Sort: more honours to West first, then by specific cards
+    const RANK = 'AKQJT98765432';
+    function rankKey(cards) {
+      return cards.map(c => RANK.indexOf(c)).join(',');
+    }
+    const sorted = Object.values(groups).sort((a, b) => {
+      if (b.westNamed.length !== a.westNamed.length) return b.westNamed.length - a.westNamed.length;
+      return rankKey(a.westNamed) < rankKey(b.westNamed) ? -1 : 1;
+    });
+
+    let html = '<table><thead><tr><th>West</th><th>East</th><th>Combinations</th><th>Probability</th></tr></thead><tbody>';
+    let grandTotal = 0;
+
+    for (const g of sorted) {
+      const wLabel = g.westNamed.length ? g.westNamed.join('') : '&mdash;';
+      const eLabel = g.eastNamed.length ? g.eastNamed.join('') : '&mdash;';
+      const headerLabel = `West: ${wLabel} &nbsp;&bull;&nbsp; East: ${eLabel}`;
+      html += `<tr class="split-header"><td colspan="4">${headerLabel}</td></tr>`;
+
+      // Sort rows within group: most x-cards to West first
+      g.patterns.sort((a, b) => b.sw - a.sw);
+
+      for (const p of g.patterns) {
+        html += `<tr>
+          <td>${formatCards(p.westNamed, p.sw)}</td>
+          <td>${formatCards(p.eastNamed, p.se)}</td>
+          <td>${p.combinations}</td>
+          <td>${(p.probability * 100).toFixed(2)}%</td>
+        </tr>`;
+      }
+
+      html += `<tr class="subtotal">
+        <td colspan="2">Subtotal</td>
+        <td></td>
+        <td>${(g.totalProb * 100).toFixed(2)}%</td>
+      </tr>`;
+      grandTotal += g.totalProb;
+    }
+
+    html += `<tr class="total-row">
+      <td colspan="2">Total</td>
+      <td></td>
+      <td>${(grandTotal * 100).toFixed(2)}%</td>
+    </tr>`;
+    html += '</tbody></table>';
+    return html;
+  }
+
+  function calculate() {
+    const errEl = document.getElementById('error');
+    const resEl = document.getElementById('results');
+    errEl.style.display = 'none';
+    resEl.innerHTML = '';
+
+    try {
+      const { named, xCount } = parseInput(document.getElementById('cards').value);
+      const w = parseInt(document.getElementById('west-vp').value, 10);
+      const e = parseInt(document.getElementById('east-vp').value, 10);
+
+      if (isNaN(w) || w < 0) throw new Error('West vacant places must be ≥ 0.');
+      if (isNaN(e) || e < 0) throw new Error('East vacant places must be ≥ 0.');
+
+      const patterns = generate(named, xCount, w, e);
+      if (patterns.length === 0) throw new Error('No valid distributions for these inputs.');
+
+      resEl.innerHTML = render(patterns);
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    }
+  }
+
+  document.getElementById('calc-btn').addEventListener('click', calculate);
+  document.getElementById('cards').addEventListener('keydown', function(ev) {
+    if (ev.key === 'Enter') calculate();
+  });
+
+  // Run on load with default values
+  calculate();
+})();
+</script>
+</body>
+</html>
